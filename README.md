@@ -12,10 +12,9 @@ This is the central codebase for autonomous stack. Different team members are bu
 
 | Module | Owner | Function |
 |---|---|---|
-| obstacle_avoidance` | — | HSV-based red-zone detection & avoidance |
 | `qr_scanning` | — | QR code detection & decoding for mission waypoints |
 | `YOLO` | — | YOLO-based object/target detection |
-| `obstacle_avoidance` | — | ROS2 and Nav2 Based Obstacle Avoidance |
+| `Object_avoidance` | — | ROS2 and Nav2 Based Obstacle Avoidance |
 
 Each module is a standalone ROS 2 package that can be built, launched, and tested on its own. They're integrated together via shared topics/messages defined in `skyscan_msgs` — see [`docs/INTEGRATION.md`](docs/INTEGRATION.md) for the interface contract (topic names, message types, update rates).
 

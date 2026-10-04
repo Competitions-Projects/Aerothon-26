@@ -1,4 +1,4 @@
-# SkyScan — AeroTHON 2026
+AeroTHON 2026
 
 Autonomous payload-delivery drone system built for **AeroTHON 2026**.  performs autonomous takeoff, QR-based mission entry, corridor navigation, GPS-bounded area survey, obstacle/red-zone avoidance, and precision payload delivery — all running on ROS 2.
 

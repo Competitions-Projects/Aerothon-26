@@ -9,6 +9,6 @@ Vision and flight scripts for the autonomous banner-tracking and corridor-entry 
 2. **Align:** Adjusts position to perfectly center the banner in the camera.
 3. **Descend:** Drops 3 meters to line up with the corridor entrance.
 4. **Approach:** Moves straight forward to enter the corridor.
-5. ** Hover: ** Brakes and holds position at the target distance.
+5. ** Hover:** Brakes and holds position at the target distance.
 
 *Note: YOLO models (`best.onnx`, `bestgz.onnx`) are too large for GitHub. Download them from the team Drive and place them in the root folder before flying.*

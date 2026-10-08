@@ -1,201 +1,216 @@
-# Jetson Orin Nano Setup Notes (headless, laptop only)
+# Jetson Orin Nano Setup, JetPack 6.2 (headless with a TTL cable)
 
-JetPack 7.2.1 (Jetson Linux r39.2.1), Jetson ISO method. No monitor, so everything is done with a laptop: serial cable for the first setup, SSH after that. Docker at the end for running the Dockerfile on the GPU.
+Notes for getting the Orin Nano Dev Kit running on JetPack 6.2 with no monitor, just a laptop and a USB-to-TTL serial cable. The serial cable is only for the first setup. After that it's SSH over Wi-Fi. Written to look back at later, so it's casual but every step is in there. Docker is at the end for running the Dockerfile on the GPU.
 
-Official guide, everything is downloaded from here:
+Official guide this is based on:
 https://docs.nvidia.com/jetson/orin-nano-devkit/user-guide/latest/quick_start.html
 
+That page is mostly about JetPack 7.2.1. The JetPack 6 stuff lives on the "JetPack 6.x Update Path" page, and that's what these notes follow.
+
 Links
-- Jetson ISO r39.2.1: https://developer.nvidia.com/downloads/embedded/l4t/r39_release_v2.1/iso/jetsoninstaller-r39.2.1-2026-08-07-18-30-47-arm64.iso
-- JetPack downloads: https://developer.nvidia.com/embedded/jetpack/downloads
+- JetPack 6.x Update Path (the main page for this): https://docs.nvidia.com/jetson/orin-nano-devkit/user-guide/latest/update_firmware.html
+- JetPack 6.2.1 SD card image: https://developer.nvidia.com/embedded/jetpack-sdk-621
+- JetPack 5.1.3 SD card image (only for the firmware bridge): https://developer.nvidia.com/embedded/jetpack-sdk-513
 - BalenaEtcher: https://etcher.balena.io/#download-etcher
-- JetPack 6.x update path (only if firmware is old): https://docs.nvidia.com/jetson/orin-nano-devkit/user-guide/latest/update_firmware.html
-- Docker setup page: https://docs.nvidia.com/jetson/orin-nano-devkit/user-guide/latest/setup_docker.html
-- Hardware layout (Button Header pins): https://docs.nvidia.com/jetson/orin-nano-devkit/user-guide/latest/hardware_layout.html
+- Hardware layout (Button Header): https://docs.nvidia.com/jetson/orin-nano-devkit/user-guide/latest/hardware_layout.html
+- Carrier board spec (Button Header details): https://developer.nvidia.com/embedded/downloads
 
 ## Things needed
 
-- Jetson Orin Nano Dev Kit + 19V power supply
-- NVMe SSD or microSD (64GB+). Not in the box.
-- USB drive, 16 GB+
-- Laptop with 25 GB+ free
+- Jetson Orin Nano Dev Kit + the 19V power supply from the box
+- microSD card, 64GB UHS-1 or bigger. Not in the box.
+- Laptop/PC with a microSD card reader (a USB one is fine)
 - USB-to-TTL serial adapter, 3.3V logic (CP2102, FTDI or CH340) + 3 female-to-female jumper wires
-- Phone with hotspot (for SSH when there's no router)
-- Ethernet cable (optional, more reliable than Wi-Fi)
+- Internet for the Jetson. Ethernet cable is strongly recommended here, setting up Wi-Fi over a text console is a pain.
+- Phone with hotspot (handy later for SSH when there's no router)
 
-Notes
-- Serial adapter has to be 3.3V. Don't connect its 5V/VCC wire to anything.
-- ISO goes on the USB drive only, never on the microSD (SD card images aren't supported from JetPack 7.2). The installer copies Jetson Linux from the USB onto the SSD/microSD.
-- Wi-Fi module is already on the board (comes with the dev kit). Nothing to install.
-- If a DisplayPort monitor + keyboard can be borrowed for an hour, Part 1 gets easier (no serial needed). NVIDIA's page has a monitor version of every step.
+The adapter has to be 3.3V. The 5V/VCC wire stays unconnected.
+
+## How it goes
+
+JetPack 6.2 goes on as an SD card image, so it's just flashing a microSD card with Etcher and booting from it. No ISO and no Ubuntu PC needed (the ISO method is only for JetPack 7.2 and later).
+
+The catch is the firmware. Some dev kits come with old factory firmware that can't boot JetPack 6 at all. So first thing is checking the firmware version.
+
+- Firmware is 36.x or newer: flash JetPack 6.2 and boot, done.
+- Firmware is older than 36: go through a JetPack 5.1.3 card first just to update the firmware, then flash JetPack 6.2.
+
+The whole thing is done through the serial console, so the cable stays connected until SSH works.
+
+NVMe note: this way installs to the microSD card. Putting it on an NVMe SSD needs NVIDIA SDK Manager on an Ubuntu PC, which isn't covered here.
 
 ---
 
-# Part 1: Install Jetson Linux (serial console)
+# Part 1: Get JetPack 6.2 on the board
 
-## Step 1: Make the ISO USB (on laptop)
+## Step 1: Wire up the serial cable
 
-1. Download Jetson ISO r39.2.1 from the link above. Saves as a `.iso` file.
-2. Can't just copy the file over, it has to be flashed as a bootable installer.
-3. Plug in the blank USB (16 GB+), open BalenaEtcher.
-4. Flash from file -> pick the `.iso`.
-5. Select target -> pick the USB.
-6. Flash! and wait a few minutes. Eject the USB.
+The serial adapter goes on the Button Header on the carrier board. Three wires:
 
-## Step 2: Hardware connections
+- header pin 3 (RXD) to the adapter TX wire
+- header pin 4 (TXD) to the adapter RX wire
+- header pin 7 (GND) to the adapter ground wire
 
-Board parts:
+TX and RX are swapped on purpose, that's how serial works. To find pin 1, look at the picture under "Headless serial" on NVIDIA's Update Path page (the link at the top) or the Hardware Layout page.
 
-1. Module with heatsink and fan. The processor is under it.
-2. 40-pin expansion header. GPIO for sensors, ICs, expansion boards.
-3. Power LED. Green when powered on.
-4. USB-C port. Data, recovery mode, host connection. Does not power the board.
-5. Gigabit Ethernet (RJ45).
-6. 4x USB 3.2 Gen2 Type-A. Flash drive, keyboard, mouse, USB cameras.
-7. DisplayPort.
-8. DC power jack, 19V barrel.
-9. 2x MIPI CSI-2 camera connectors, 22-pin flex.
+USB end of the adapter goes into the laptop. The 19V power supply stays unplugged for now.
 
-microSD slot is under the module. NVMe goes on the carrier board. Storage has to be in before powering on, the OS gets installed on it.
+## Step 2: Open the serial console on the laptop
 
-Connections:
-
-1. NVMe or microSD installed.
-2. ISO USB drive in a USB-A port.
-3. Serial adapter to the Button Header on the carrier board (3 wires):
-   - header pin 3 (RXD) -> adapter TX
-   - header pin 4 (TXD) -> adapter RX
-   - header pin 7 (GND) -> adapter GND
-   - TX and RX are crossed on purpose
-   - pin 1 location: see the picture under "Headless serial" on NVIDIA's quick start page, or the Hardware Layout page
-4. Adapter USB end into the laptop.
-5. 19V power goes in last, when ready to power on. Turns on by itself, green LED next to the USB-C port.
-
-## Step 3: Open the serial console (on laptop)
-
-Do this before powering on the Jetson. The window stays blank until it boots.
+Do this before powering on the Jetson. The window stays blank until the board boots.
 
 **Windows**
-1. Device Manager -> Ports (COM & LPT) -> note the port, e.g. COM5.
-2. No port showing: install the driver for the adapter chip (CP210x or CH340).
-3. PuTTY -> Serial -> COM port -> speed 115200 -> Open.
+1. Device Manager, Ports (COM & LPT), note the port (something like COM5).
+2. If no port shows up, install the driver for the adapter chip (CP210x or CH340).
+3. PuTTY: Connection type Serial, Serial line is the COM port, Speed is 115200, then Open.
 
 **Mac / Linux**
 ```bash
 ls /dev/tty*                      # find the port, e.g. /dev/ttyUSB0
 screen /dev/ttyUSB0 115200
 ```
-Linux: may need sudo, or add the user to the `dialout` group. Mac port looks like `/dev/tty.usbserial-xxxx`.
+On Linux it might need sudo, or add the user to the `dialout` group. On a Mac the port looks like `/dev/tty.usbserial-xxxx`.
 
-## Step 4: Check firmware (the gatekeeper)
+WSL isn't good for this part. Plain Windows with PuTTY is simpler.
 
-Firmware has to be 36.x or newer, otherwise the JetPack 7 installer won't work.
+## Step 3: Check the firmware version
 
-1. Power on the Jetson.
-2. Click the serial window, press Esc repeatedly. Opens the UEFI menu.
-3. Firmware version is near the top.
-   - 36.x or newer (JetPack 6.x generation): fine, go to Step 5.
-   - Older than 36: do the JetPack 6.x update path first (link above), then come back.
-4. Power off.
+1. Plug in the 19V power supply. It turns on by itself. No microSD card needed for this.
+2. Click the serial window and keep pressing Esc. This opens the UEFI setup menu in the console.
+3. The firmware version is on a line near the top.
+   - 36.x or newer: skip Step 4, go to Step 5.
+   - Older than 36 (something like 3.x, 4.x or 5.x): do Step 4.
 
-If the screen stays blank or drops to a UEFI shell when booting the ISO, the firmware is probably too old. Power off, don't keep retrying.
+If nothing shows up, check the TX/RX wires aren't the wrong way round and the speed is 115200.
 
-## Step 5: Install Jetson Linux
+## Step 4: Old firmware, update it with JetPack 5.1.3 (only if needed)
 
-**Phase 1: boot from the USB**
+JetPack 5.1.3 is just a bridge, it wakes up the firmware update feature on old boards. It gets used once and then it's gone.
 
-1. Power on with the USB plugged in.
-2. Press Esc in the serial window while the pre-boot options show.
-3. Arrow keys to Boot Manager, Enter.
-4. Pick the USB drive, Enter.
+1. Download the JetPack 5.1.3 SD card image for the Orin Nano from the link above. Has to be the updated one, the file is called `JP513-orin-nano-sd-card-image_b29.zip`.
+2. Flash it to the microSD card with BalenaEtcher (Etcher takes the zip as is, no need to unzip). Flash from file, select the zip, select the microSD card, Flash.
+3. Power off the Jetson, put the microSD card in the slot on the underside of the module, and plug in Ethernet.
+4. Power on. The first-boot setup should show up as text in the serial window. NVIDIA's page doesn't show what the headless version looks like, so it isn't confirmed. If nothing appears after a few minutes, a monitor is needed for that one step.
+5. Go through it: EULA, language, keyboard, time zone, username and password.
+6. Make sure the board is online. With Ethernet plugged in it should be. If using Wi-Fi:
 
-**Phase 2: confirm the firmware update (crucial)**
+   ```bash
+   nmcli device wifi list
+   sudo nmcli device wifi connect "WIFI_NAME" password "WIFI_PASSWORD"
+   ```
 
-1. Installer checks the board firmware and asks to update the QSPI firmware.
-2. Press Y right away. Keep the serial window focused.
-3. Only 30 seconds to press it. If missed, the install fails later. Restart the install and press Y when the prompt comes up.
+7. After it boots, a background service schedules the firmware update on its own. Check it from the serial window:
 
-**Phase 3: firmware update runs**
+   ```bash
+   sudo systemctl status nv-l4t-bootloader-config
+   ```
 
-- Two rounds.
-- Don't touch or unplug anything. It may reboot on its own, that's normal.
+   Done looks like inactive with a successful exit.
+8. Reboot:
 
-**Phase 4: install to SSD or microSD**
+   ```bash
+   sudo reboot
+   ```
 
-1. After the update, the GRUB menu shows up. Pick "Install Jetson ISO r39.2.1", Enter.
-2. Pick the target: NVMe SSD or microSD.
-3. Confirm. This wipes the target drive, so double check which one.
-4. Wait for the progress bar, then Reboot.
-5. Unplug the USB when it asks.
+   The firmware update runs on the way up and progress shows in the serial window. It prints something like "Update Progress - 10%". Don't unplug anything. It boots back into JetPack 5.1.3 afterwards.
+9. Install the QSPI updater:
 
-## Step 6: First setup (still over serial)
+   ```bash
+   sudo nvbootctrl dump-slots-info      # just shows the current firmware version
+   sudo apt update
+   sudo apt install nvidia-l4t-jetson-orin-nano-qspi-updater
+   ```
 
-The setup questions should show up as text in the serial window. NVIDIA's page doesn't describe the headless version of this, so the exact look isn't confirmed. If nothing shows up after a few minutes, a monitor is needed for this one step.
+10. Reboot again. The QSPI update runs, wait for it to finish.
+11. Power off and take the JetPack 5.1.3 card out. The firmware is ready for JetPack 6 now, that card is done.
 
-1. Accept the EULA.
-2. Language, keyboard, time zone.
-3. Network: Wi-Fi or Ethernet. Skip if not offered, do it in Step 7.
-4. Username, password, computer name.
-5. Log in.
+Don't pull the power while any firmware update is running.
 
-Write down the username, password and computer name.
+## Step 5: Flash JetPack 6.2 to the microSD card
 
-## Step 7: Wi-Fi and IP address (in the serial window)
+1. Download the JetPack 6.2.1 SD card image for the Orin Nano from the link above (6.2.x all work the same way).
+2. Flash it to the microSD card with BalenaEtcher. If the same card was used for 5.1.3, it just gets overwritten.
+3. Put the card in the slot on the underside of the module.
 
-Join Wi-Fi if not done in the setup:
+## Step 6: First boot (over serial)
+
+1. Serial window open, Ethernet plugged in, then power on.
+2. The setup should show up as text in the serial window (same caveat as before, NVIDIA's page doesn't show the headless version). Go through it: EULA, language, keyboard, time zone, network, username, password, computer name.
+3. Write down the username, password and computer name.
+4. Log in at the serial window.
+5. If Wi-Fi isn't connected yet:
+
+   ```bash
+   nmcli device wifi list
+   sudo nmcli device wifi connect "WIFI_NAME" password "WIFI_PASSWORD"
+   ```
+
+6. Check if JetPack 6.2 scheduled another firmware update:
+
+   ```bash
+   sudo systemctl status nv-l4t-bootloader-config
+   ```
+
+   If it did, `sudo reboot` once more and let the update run. Boots back into JetPack 6.2 after.
+
+Once the IP is known (Part 2), the serial cable isn't needed anymore.
+
+## Step 7: MAXN SUPER
+
+The default power mode is usually 25W. MAXN SUPER lets the board use full power for max CPU and GPU speed. No desktop menu without a monitor, so it's the terminal:
 
 ```bash
-nmcli device wifi list
-sudo nmcli device wifi connect "WIFI_NAME" password "WIFI_PASSWORD"
+sudo nvpmodel -q          # current mode
+sudo nvpmodel -m 2        # MAXN SUPER
+sudo jetson_clocks        # optional, locks clocks at max
 ```
 
-Get the IP:
+These commands aren't on NVIDIA's page (it only shows the desktop menu way), so check the mode number on the board with `sudo nvpmodel -q --verbose`.
+
+## Step 8: Update and check the JetPack parts
+
+The JetPack 6.2 SD card image already has CUDA, cuDNN and TensorRT in it. Just update:
 
 ```bash
-hostname -I
+sudo apt update
+sudo apt upgrade -y
 ```
 
-Looks like `192.168.1.45`. Write it down.
+If something turns out to be missing later:
 
-College/hostel Wi-Fi often blocks devices from talking to each other. If SSH fails in Step 8, use the phone hotspot: laptop and Jetson both on it. Or Ethernet cable from the Jetson to the router.
+```bash
+sudo apt install -y nvidia-jetpack
+```
 
 ---
 
 # Part 2: Connect from the laptop (SSH)
 
-Serial cable isn't needed after this.
+Once the board is on Wi-Fi, a screen or cable isn't needed anymore. Everything happens from the laptop.
 
-## Step 1: SSH in
+## Find the IP
 
-Laptop on the same Wi-Fi as the Jetson. In a terminal (PowerShell on Windows):
+On the Jetson:
+
+```bash
+hostname -I
+```
+
+Gives something like `192.168.1.45`. Note it down.
+
+## SSH in
+
+Laptop has to be on the same Wi-Fi as the Jetson. In a terminal (PowerShell on Windows):
 
 ```bash
 ssh username@192.168.1.45
 ```
 
-Or with the computer name: `ssh username@computername.local`. Type the password.
+`username` is whatever got created during first boot. Computer name works too: `ssh username@computername.local`. Type the password and that's it.
 
-## Step 2: Update and install JetPack parts
+College and hostel Wi-Fi usually blocks devices from talking to each other, so SSH can fail even when both are online. Fix is the phone hotspot, with the laptop and the Jetson both connected to it. Ethernet cable from the Jetson to a router also works.
 
-```bash
-sudo apt update
-sudo apt upgrade -y
-sudo apt install -y nvidia-jetpack
-```
-
-## Step 3: MAXN SUPER
-
-Default power mode is usually 25W. MAXN SUPER lets it draw full power for max CPU/GPU speed. No desktop menu without a monitor, so use the terminal:
-
-```bash
-sudo nvpmodel -q          # current mode
-sudo nvpmodel -m 2        # MAXN SUPER
-sudo jetson_clocks        # optional, keeps clocks at max
-```
-
-Mode numbers can change between releases. Check with `sudo nvpmodel -q --verbose` or `/etc/nvpmodel.conf`. NVIDIA's page only shows the desktop menu way, so verify the number on the board.
-
-## Step 4: Copy files to the Jetson
+## Copy the project over
 
 From the laptop:
 
@@ -203,25 +218,22 @@ From the laptop:
 scp -r my_project username@192.168.1.45:~/
 ```
 
-Or push to GitHub and `git clone` on the Jetson. VS Code "Remote - SSH" extension also works for editing files on the Jetson from the laptop.
+Or push to GitHub and `git clone` on the Jetson. VS Code with the "Remote - SSH" extension is nice too, edits files on the Jetson straight from the laptop.
 
 ---
 
 # Part 3: Docker
 
-NVIDIA's page for this is linked at the top.
+JetPack 6.x SD card images usually come with Docker and the NVIDIA runtime already installed. Check before installing anything.
 
-## Step 1: Install Docker + NVIDIA Container Toolkit
-
-Host only needs Docker and the NVIDIA runtime so containers can use the GPU.
-
-Check if Docker is already there:
+## Is Docker already there
 
 ```bash
 docker --version
+docker info | grep -i runtime
 ```
 
-If not, or the NVIDIA runtime isn't set up:
+If both work and the runtimes line shows `nvidia`, skip to "Make nvidia the default runtime". If not:
 
 ```bash
 sudo apt update
@@ -232,16 +244,18 @@ sudo systemctl daemon-reload
 sudo systemctl restart docker
 ```
 
-Optional, so sudo isn't needed every time:
+NVIDIA's Docker page: https://docs.nvidia.com/jetson/orin-nano-devkit/user-guide/latest/setup_docker.html
+
+To not type sudo every time:
 
 ```bash
 sudo usermod -aG docker $USER
 newgrp docker
 ```
 
-## Step 2: Make nvidia the default runtime
+## Make nvidia the default runtime
 
-Why: without this, Docker only uses the GPU when `--runtime nvidia` is passed to `docker run`. `docker build` runs CPU only, so any `RUN` line that builds CUDA code, sets up TensorRT, or tests PyTorch fails (no GPU found). With it set, every build step and run uses the NVIDIA runtime.
+This one matters because of the Dockerfile. Without it, Docker only uses the GPU when `--runtime nvidia` is passed to `docker run`. `docker build` runs CPU only, so any `RUN` line that needs CUDA, TensorRT or a GPU PyTorch check fails with "no GPU found". With it set, every build step and every run uses the NVIDIA runtime.
 
 1. Open the config:
 
@@ -249,7 +263,7 @@ Why: without this, Docker only uses the GPU when `--runtime nvidia` is passed to
    sudo nano /etc/docker/daemon.json
    ```
 
-2. Contents (keep any settings already in the file, just add these):
+2. It should contain this. If the file already has other settings, keep them and just add these lines:
 
    ```json
    {
@@ -278,34 +292,35 @@ Why: without this, Docker only uses the GPU when `--runtime nvidia` is passed to
 
    Should show `Default Runtime: nvidia`.
 
-## Step 3: Test the GPU
+## Base image for the Dockerfile
 
-```bash
-docker run --rm -it -v "$PWD":/workspace -w /workspace nvcr.io/nvidia/pytorch:25.08-py3
-```
-
-Inside the container:
-
-```bash
-python3 -c "import torch; print(torch.cuda.is_available())"
-```
-
-Should print `True`.
-
-## Step 4: Dockerfile base image
-
-JetPack 7.2 uses CUDA 13. Images built for JetPack 6 (CUDA 12, r36 tags) can fail with CUDA error 801 or silently run on CPU. Use a CUDA 13 arm64 image, e.g.:
+JetPack 6.2 is Jetson Linux r36.4.x with CUDA 12.6, so the base image has to be an r36 one. Images made for JetPack 7 (r39, CUDA 13) won't work here, and old r35 ones (JetPack 5) won't either.
 
 ```dockerfile
-FROM nvcr.io/nvidia/cuda:13.0.0-devel-ubuntu24.04
+FROM nvcr.io/nvidia/l4t-jetpack:r36.4.0
 ```
 
+- r36.4.0 is the one NVIDIA publishes for the whole 36.4 family (JetPack 6.2 and 6.2.1). Newer r36.4.x tags may exist, check NGC.
 - arm64 only, build on the Jetson itself.
-- Keep images on the NVMe if there is one, they get big.
+- Images get big. They live on the microSD, so keep an eye on space (`df -h`).
 
-## Step 5: Build and run
+## Quick test
 
-Build from the folder with the Dockerfile:
+```bash
+docker run --rm -it --runtime nvidia nvcr.io/nvidia/l4t-jetpack:r36.4.0 nvcc --version
+```
+
+Should print the CUDA version (12.6). That only shows CUDA is there. Real proof the GPU is being used comes when the YOLO code runs. On the Jetson (not in the container) run:
+
+```bash
+sudo tegrastats
+```
+
+and watch `GR3D_FREQ`. It's the GPU load, it should jump while YOLO runs.
+
+## Build and run
+
+Build from the folder that has the Dockerfile:
 
 ```bash
 docker build -t <your-image-name> .
@@ -317,9 +332,9 @@ Run with the GPU (`--runtime nvidia` or `--gpus all`, or set it in docker-compos
 docker run --runtime nvidia --network host -it <your-image-name>
 ```
 
-## Step 6: YOLO speed
+## YOLO speed
 
-A `.pt` model runs slowly on the Jetson. Convert to TensorRT on the Jetson itself, then load the `.engine` file in the ROS code:
+A `.pt` model is slow on the Jetson. Convert it to TensorRT on the Jetson itself and load the `.engine` file in the ROS code:
 
 ```bash
 yolo export model=best.pt format=engine half=True
@@ -327,35 +342,118 @@ yolo export model=best.pt format=engine half=True
 
 ---
 
-# Part 4: On the drone
+# Part 4: Arducam IMX519 camera
 
-## Power
+This is the 16MP camera from the parts list. It isn't plug-and-play on Jetson (unlike the IMX219), so it needs Arducam's driver. Arducam's page: https://docs.arducam.com/Nvidia-Jetson-Camera/Native-Camera/Quick-Start-Guide/
 
-- Battery is 6S (about 22 to 25V). Too high to plug straight into the Jetson.
-- Use a BEC set to 12V, rated 5A or more, into the barrel jack. Jetson dev kit input is roughly 9 to 19V, check the carrier board spec.
-- Check the BEC output with a multimeter before connecting the Jetson. Many BECs default to 5V, which won't run it.
-- Check barrel jack polarity with a multimeter against the supplied adapter. Center pin should be positive.
-- Don't power it from the Pixhawk power module. Its output is 5V and too weak.
-- USB-C does not power the board.
+Things to know first:
+- The driver only works on the official NVIDIA dev kit carrier board. Third-party boards aren't guaranteed.
+- The JetPack version has to be on Arducam's supported list. For the Orin Nano that's JetPack 6.2 (L4T 36.4.3, 36.4.4, 36.4.7, 36.5.0). JetPack 7 isn't on it, which is why these notes use 6.2. Check the version with `cat /etc/nv_tegra_release`.
+- The driver gets built for the exact kernel that's running. So do the `apt upgrade` first, install the camera driver last, and don't upgrade again afterwards without testing the camera.
 
-## Flight controller link
+## Plug in the camera
 
-- Jetson to CubePilot over serial (UART), usually through MAVROS.
-- Jetson 40-pin header UART pins to the CubePilot TELEM port, with ground connected.
-- Exact pins and the MAVROS command: to be filled in once the TELEM port is chosen.
+1. Power the Jetson off first.
+2. Cable: the dev kit's camera port is 22-pin. The IMX519 module is normally 15-pin, so it needs a 15-pin to 22-pin cable (a 22-22 one only if the module itself is 22-pin). Arducam's page has pictures of both.
+3. The camera ports are on the board edge opposite the GPIO header.
+4. Gently pull up the plastic edges of the port.
+5. Push the ribbon in. The silver contacts face the heatsink side. It has to go all the way in, and the cable shouldn't be bent.
+6. Push the plastic part back down while holding the cable.
+7. Note which port it's in. CAM0 is `sensor_id=0`, CAM1 is `sensor_id=1`.
 
-## Start on boot
+## Install the driver
 
-No typing in flight, so run the container detached with a restart policy:
+On the Jetson (over SSH is fine):
 
 ```bash
-docker run -d --restart unless-stopped --runtime nvidia --network host <your-image-name>
+cd ~
+wget https://github.com/ArduCAM/MIPI_Camera/releases/download/v0.0.3/install_full.sh
+chmod +x install_full.sh
+./install_full.sh -m imx519
 ```
 
-Starts every time the Jetson powers on.
+Then reboot:
 
-## Reaching it in the field
+```bash
+sudo reboot
+```
 
-- Venue may have no Wi-Fi. Use the phone hotspot, with the laptop and Jetson both on it, then SSH to the Jetson's IP.
-- Join the hotspot from the Jetson ahead of time (`nmcli`, Part 1 Step 7) so it connects by itself on boot.
-- Test this at home first.
+If it complains about permissions, put `sudo` in front of the install line.
+
+## Check that it shows up
+
+```bash
+v4l2-ctl --list-devices
+ls /dev/video*
+dmesg | grep -i imx519
+```
+
+There should be a video device, and the dmesg line should say the imx519 driver loaded. Nothing there means the camera isn't detected, see the problems list below.
+
+## Test it
+
+Preview needs a monitor, so with no screen it's easier to save a picture or a short video and copy it to the laptop.
+
+One picture (this command isn't from Arducam's page, but it's standard Jetson):
+
+```bash
+gst-launch-1.0 nvarguscamerasrc sensor-id=0 num-buffers=1 ! "video/x-raw(memory:NVMM),width=1920,height=1080" ! nvjpegenc ! filesink location=test.jpg
+```
+
+Short video (from Arducam's page, Ctrl+C to stop):
+
+```bash
+SENSOR_ID=0
+FRAMERATE=30
+gst-launch-1.0 -e nvarguscamerasrc sensor-id=$SENSOR_ID ! "video/x-raw(memory:NVMM),width=1920,height=1080,framerate=$FRAMERATE/1" ! nvv4l2h264enc ! h264parse ! mp4mux ! filesink location=cam$SENSOR_ID.mp4
+```
+
+Copy it to the laptop, run this on the laptop:
+
+```bash
+scp username@192.168.1.45:~/test.jpg .
+```
+
+To see the formats the camera offers: `v4l2-ctl --list-formats-ext`.
+
+Live preview with a monitor on the Jetson (with SSH, `export DISPLAY=:0` first):
+
+```bash
+gst-launch-1.0 nvarguscamerasrc sensor_id=0 ! "video/x-raw(memory:NVMM),width=1920,height=1080,framerate=30/1,format=NV12" ! nvvidconv flip-method=0 ! "video/x-raw,width=960,height=720" ! nvvidconv ! nvegltransform ! nveglglessink -e
+```
+
+## Using the camera inside Docker
+
+The container needs the NVIDIA runtime plus the Argus socket and the video device. This isn't from Arducam's page, so test it:
+
+```bash
+docker run --runtime nvidia --network host -it \
+  -v /tmp/argus_socket:/tmp/argus_socket \
+  --device /dev/video0 \
+  <your-image-name>
+```
+
+If the camera still doesn't open in the container, `--privileged` is the quick (but blunt) fix.
+
+## If something goes wrong
+
+- **Not detected at all:** power off and reseat the cable (all the way in, contacts facing the heatsink side). Try the other camera port. Check the JetPack version is on the list above. Check `uname -r` and compare with what the installer targeted.
+- **Driver loads but no frames:** this has been reported on JetPack 6.2 forums. Try the other port and a different cable, reboot, and check `dmesg | grep -i imx519` for errors.
+- **Wrong cable:** the Orin Nano port is 22-pin, a plain 15-15 cable won't fit it.
+- **Don't force device tree overlays by hand.** One forum user did and the board stopped booting. Let Arducam's script do it.
+- **Still stuck:** Arducam's support is at forum.arducam.com.
+- **Autofocus:** Arducam has an example called `Jetson_IMX519_Focus_Example`, linked from the quick start page.
+
+---
+
+# Part 5: Later, on the drone
+
+- **Power:** the battery is 6S (about 22 to 25V), too high for the Jetson. Use a BEC set to 12V, 5A or more, into the barrel jack. The dev kit takes roughly 9 to 19V, check the carrier board spec. Measure the BEC output with a multimeter before plugging in, a lot of BECs are 5V by default. Check the barrel jack polarity too (center should be positive). The Pixhawk power module output is 5V, too weak for this. USB-C doesn't power the board.
+- **Flight controller:** Jetson to CubePilot over serial (UART), usually through MAVROS. Jetson 40-pin header UART pins to the CubePilot TELEM port, with ground connected. Exact pins to be filled in once the TELEM port is picked.
+- **Start on boot:** nobody can type in flight, so run the container detached with a restart policy:
+
+  ```bash
+  docker run -d --restart unless-stopped --runtime nvidia --network host <your-image-name>
+  ```
+
+- **No Wi-Fi at the venue:** phone hotspot. Join it from the Jetson ahead of time (`nmcli`) so it connects by itself on boot. Test this at home first.

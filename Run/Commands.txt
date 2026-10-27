@@ -1,0 +1,18 @@
+﻿vncserver :2 -geometry 1920x1080 -localhost no
+ss -ltn | grep 5902          # should show 0.0.0.0:5902
+	
+scp sweep_landing_test10.py lovemon@lovemon.local:~/ 
+
+MicroXRCEAgent serial --dev /dev/ttyUSB0 -b 921600 
+ros2 launch orbbec_camera gemini_330_series.launch.py
+python3 ~/scripts/usb_camera_node.py --ros-args -p encoding:=jpeg -p exposure:=10 -p gain:=60
+
+
+tmux new-session -d -s drone "bash -ic 'MicroXRCEAgent serial --dev /dev/ttyUSB0 -b 921600; bash'" \; split-window -v "bash -ic 'python3 ~/scripts/usb_camera_node.py --ros-args -p exposure:=10 -p gain:=60; bash'" \; split-window -v "bash -ic 'ros2 launch orbbec_camera gemini_330_series.launch.py; bash'" \; select-layout even-vertical \; attach
+
+tmux kill-session -t drone
+
+
+ros2 run rqt_image_view rqt_image_view /camera/image_raw --ros-args -p image_transport:=compressed
+
+vncviewer lovemon.local:2
